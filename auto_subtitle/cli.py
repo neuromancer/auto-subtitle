@@ -67,6 +67,10 @@ def main():
         "--long_threshold", type=float, default=6.0,
         help="Only segments longer than this (seconds) will be adjusted"
     )
+    parser.add_argument(
+        "--audio_track", type=int, default=0,
+        help="Audio track to extract from the video"
+    )
 
     args = parser.parse_args().__dict__
 
@@ -75,6 +79,7 @@ def main():
     model_name: str = args.pop("model")
     output_dir: str = args.pop("output_dir")
     language: str = args.pop("language")
+    audio_track: int = args.pop("audio_track")
 
     # Timing params
     reading_speed: float = args.pop("reading_speed")
@@ -110,7 +115,7 @@ def main():
         return
 
     # Extract audio for each video
-    audios = get_audio(video_files)
+    audios = get_audio(video_files, audio_track)
 
     # Generate SRTs
     get_subtitles(
@@ -125,7 +130,7 @@ def main():
     )
 
 
-def get_audio(paths):
+def get_audio(paths, audio_track: int):
     temp_dir = tempfile.gettempdir()
     audio_paths: Dict[str, str] = {}
 
@@ -133,12 +138,16 @@ def get_audio(paths):
         print(f"Extracting audio from {filename(path)}...")
         output_path = os.path.join(temp_dir, f"{filename(path)}.wav")
 
-        ffmpeg.input(path).output(
-            output_path,
-            acodec="pcm_s16le", ac=1, ar="16k"
-        ).run(quiet=True, overwrite_output=True)
+        try:
+            stream = ffmpeg.input(path)[f'a:{audio_track}']
+            stream.output(
+                output_path,
+                acodec="pcm_s16le", ac=1, ar="16k"
+            ).run(quiet=False, overwrite_output=True)
 
-        audio_paths[path] = output_path
+            audio_paths[path] = output_path
+        except ffmpeg.Error as e:
+            print(f"Could not extract audio from {filename(path)}: {e.stderr}")
 
     return audio_paths
 
